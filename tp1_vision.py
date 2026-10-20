@@ -610,13 +610,19 @@ def _(mo):
 
 
 @app.cell
-def _():
+def _(np):
     from skimage.feature import hog
 
     def descripteurs_classiques(image):
         """image : PIL.Image -> vecteur numpy de longueur 1812 (HOG + histogrammes de couleur)."""
-        # TODO 2
-        raise NotImplementedError("À compléter")
+        img = np.asarray(image.convert("RGB").resize((128, 128)))
+        gris = img.mean(axis=2) / 255
+        f_hog = hog(gris, orientations=9, pixels_per_cell=(16, 16), cells_per_block=(2, 2))
+        histos = []
+        for c in range(3):
+            h, _ = np.histogram(img[:, :, c], bins=16, range=(0, 256))
+            histos.append(h / h.sum())
+        return np.concatenate([f_hog] + histos)
 
     return (descripteurs_classiques,)
 
@@ -692,9 +698,9 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
-    3. ...
+    1. Le deep learning est bien meilleur : 94,6 % pour EfficientNet-B0 contre 15,7 % pour la baseline, soit environ 79 points d'écart. Le calcul est un peu plus long (42 ms contre 24 ms par image), mais l'écart le justifie largement.
+    2. Hypothèse : non, le HOG et les histogrammes de couleur décrivent seulement la forme générale et les couleurs. Deux races proches avec le même pelage (par exemple deux chats gris) seront sûrement confondues.
+    3. Par exemple, trier des pièces de couleurs différentes sur un tapis roulant, avec un fond et un éclairage fixes : la couleur et la forme suffisent.
     """)
     return
 
@@ -727,8 +733,14 @@ def _(mo):
 @app.function
 def geler_backbone(modele, n_etages_degeles):
     """Gèle tout sauf les n derniers étages de modele.features et modele.classifier. Renvoie le modèle."""
-    # TODO 3
-    raise NotImplementedError("À compléter")
+    for p in modele.parameters():
+        p.requires_grad = False
+    if n_etages_degeles > 0:
+        for p in modele.features[-n_etages_degeles:].parameters():
+            p.requires_grad = True
+    for p in modele.classifier.parameters():
+        p.requires_grad = True
+    return modele
 
 
 @app.cell(hide_code=True)
@@ -754,15 +766,22 @@ def _(mo):
     return
 
 
-@app.function
-def creer_optimiseur(modele, lr_tete, lr_backbone):
-    """Renvoie un AdamW avec un learning rate pour la tête et un autre pour le backbone dégelé."""
-    # TODO 4
-    raise NotImplementedError("À compléter")
+@app.cell
+def _(torch):
+    def creer_optimiseur(modele, lr_tete, lr_backbone):
+        """Renvoie un AdamW avec un learning rate pour la tête et un autre pour le backbone dégelé."""
+        params_tete = list(modele.classifier.parameters())
+        params_backbone = [p for p in modele.features.parameters() if p.requires_grad]
+        groupes = [{"params": params_tete, "lr": lr_tete}]
+        if len(params_backbone) > 0:
+            groupes.append({"params": params_backbone, "lr": lr_backbone})
+        return torch.optim.AdamW(groupes, weight_decay=1e-4)
+
+    return (creer_optimiseur,)
 
 
 @app.cell(hide_code=True)
-def _(mo, ok_todo3, tests, tp):
+def _(creer_optimiseur, mo, ok_todo3, tests, tp):
     tp.bloquer_si(not ok_todo3, mo, "Terminez le TODO 3 d'abord.")
     ok_todo4, _affichage = tp.verifier(tests.tests_optimiseur(creer_optimiseur, geler_backbone), mo)
     _affichage
@@ -786,8 +805,18 @@ def _(mo):
 @app.function
 def entrainer_une_epoque(modele, chargeur, optimiseur, critere, appareil):
     """Entraîne le modèle sur un passage complet du chargeur. Renvoie la perte moyenne (float)."""
-    # TODO 5
-    raise NotImplementedError("À compléter")
+    modele.train()
+    perte_totale = 0
+    n = 0
+    for x, y in chargeur:
+        x, y = x.to(appareil), y.to(appareil)
+        optimiseur.zero_grad()
+        perte = critere(modele(x), y)
+        perte.backward()
+        optimiseur.step()
+        perte_totale += perte.item() * len(y)
+        n += len(y)
+    return perte_totale / n
 
 
 @app.cell(hide_code=True)
@@ -851,6 +880,7 @@ def _(
     cfg_lr_backbone,
     cfg_lr_tete,
     classes,
+    creer_optimiseur,
     img_tr,
     img_va,
     mo,

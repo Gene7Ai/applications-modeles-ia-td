@@ -1086,7 +1086,7 @@ def _(mo):
     résolution, modèle) proposeriez-vous pour les réduire ? Elles seraient à évaluer sur la validation, puis sur
     un nouveau jeu de test.
 
-    ...
+    Oui, ces confusions sont compréhensibles : ce sont des races très proches, par exemple British Shorthair et Russian Blue (deux chats gris), ou American Pit Bull Terrier et Staffordshire Bull Terrier. Même un humain peut les confondre. Pistes : ajouter plus d'images pour ces races, utiliser une résolution plus grande (224 au lieu de 160) et entraîner plus d'époques.
     """)
     return
 
@@ -1126,23 +1126,57 @@ def _(mo):
     return
 
 
-@app.function
-def grad_cam(modele, couche, image, classe=None):
-    """image : tenseur (1, 3, H, W). Renvoie une carte numpy (h, w) dans [0, 1] pour `classe`
-    (par défaut, la classe prédite)."""
-    # TODO 7
-    raise NotImplementedError("À compléter")
+@app.cell
+def _(torch):
+    def grad_cam(modele, couche, image, classe=None):
+        """image : tenseur (1, 3, H, W). Renvoie une carte numpy (h, w) dans [0, 1] pour `classe`
+        (par défaut, la classe prédite)."""
+        activations = []
+        gradients = []
+
+        def crochet(module, entree, sortie):
+            activations.append(sortie)
+            sortie.register_hook(lambda g: gradients.append(g))
+
+        h = couche.register_forward_hook(crochet)
+        scores = modele(image)
+        h.remove()
+        if classe is None:
+            classe = int(scores.argmax(dim=1)[0])
+        modele.zero_grad()
+        scores[0, classe].backward()
+
+        A = activations[0][0]
+        G = gradients[0][0]
+        poids = G.mean(dim=(1, 2))
+        carte = (poids[:, None, None] * A).sum(dim=0)
+        carte = torch.relu(carte)
+        carte = (carte - carte.min()) / (carte.max() - carte.min() + 1e-8)
+        return carte.detach().cpu().numpy()
+
+    return (grad_cam,)
 
 
 @app.cell(hide_code=True)
-def _(mo, tests, tp):
+def _(grad_cam, mo, tests, tp):
     ok_todo7, _affichage = tp.verifier(tests.tests_gradcam(grad_cam), mo)
     _affichage
     return (ok_todo7,)
 
 
 @app.cell
-def _(classes, ds_test_ft, mo, modele_ft, np, ok_todo7, pred_ft, tp, y_te):
+def _(
+    classes,
+    ds_test_ft,
+    grad_cam,
+    mo,
+    modele_ft,
+    np,
+    ok_todo7,
+    pred_ft,
+    tp,
+    y_te,
+):
     tp.bloquer_si(not ok_todo7, mo, "Terminez le TODO 7 pour appliquer Grad-CAM.")
     for _p in modele_ft.parameters():
         _p.requires_grad_(True)  # nécessaire si une partie du réseau était gelée
@@ -1173,7 +1207,7 @@ def _(mo):
     **Votre réponse :** le modèle regarde-t-il l'animal ou autre chose (fond, coussin, main) ?
     Les erreurs s'expliquent-elles par la zone regardée ?
 
-    ...
+    Pour les prédictions justes, le modèle regarde bien l'animal : la tête, les oreilles ou le pelage (par exemple les taches de l'Egyptian Mau). Pour les erreurs, il regarde souvent autre chose : le sol, la neige ou le fond. Pour le Bombay, l'image est très sombre et la carte ne montre presque rien. Donc oui, les erreurs s'expliquent en partie par la zone regardée.
     """)
     return
 
@@ -1198,7 +1232,17 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(Image, classes, mo, modele_ft, ok_todo7, plt, televersement, tp):
+def _(
+    Image,
+    classes,
+    grad_cam,
+    mo,
+    modele_ft,
+    ok_todo7,
+    plt,
+    televersement,
+    tp,
+):
     import io as _io
 
     mo.stop(not televersement.value, mo.md("En attente d'une image."))
@@ -1228,7 +1272,7 @@ def _(mo):
     qui somment toujours à 100 % sur les 37 races, permettent-elles de le détecter ? En service, qu'est-ce qui
     différera des images de test (photos d'utilisateurs, appareils, cadrage) ?
 
-    ...
+    Pour une photo de Stephen Curry, le modèle prédit quand même une race : Boxer (7 %). Les probabilités font toujours 100 % sur les 37 races, donc le modèle ne peut pas dire « ce n'est pas un animal ». Une confiance faible peut aider, mais ce n'est pas fiable : pour un Chow-Chow (race absente des 37), il prédit Persian avec 27 %. En service, les photos seront différentes : autres appareils, cadrage, lumière, et aussi des races ou des objets que le modèle n'a jamais vus.
     """)
     return
 
@@ -1249,13 +1293,13 @@ def _(mo):
     | Rubrique | Votre réponse |
     |---|---|
     | Problème métier | Reconnaître la race d'un animal à partir d'une photo |
-    | Baseline classique et son score (test) | ... |
-    | Modèle retenu et pourquoi | ... |
-    | Métrique principale et score obtenu (test, avec son intervalle à 95 %) | ... |
-    | Coût (temps d'entraînement, temps d'inférence, matériel) | ... |
-    | Principaux cas d'échec | ... |
-    | Le deep learning est-il justifié ici ? | ... |
-    | Déployable en l'état ? Sinon, que manque-t-il ? | ... |
+    | Baseline classique et son score (test) | HOG + couleur + SVM : 9,7 % |
+    | Modèle retenu et pourquoi | EfficientNet-B0 avec 2 étages dégelés : meilleur résultat sur la validation (78,1 %) pour un coût faible |
+    | Métrique principale et score obtenu (test, avec son intervalle à 95 %) | Accuracy : 77,3 % ± 3,5 points (555 images) |
+    | Coût (temps d'entraînement, temps d'inférence, matériel) | Environ 2 min d'entraînement (3 époques), environ 40 ms par image, sur CPU |
+    | Principaux cas d'échec | Races très proches (British Shorthair / Russian Blue), images sombres, modèle qui regarde le fond |
+    | Le deep learning est-il justifié ici ? | Oui : 77,3 % contre 9,7 % pour la baseline |
+    | Déployable en l'état ? Sinon, que manque-t-il ? | Non : l'accuracy est encore trop faible et le modèle ne sait pas rejeter une image qui n'est ni un chat ni un chien. Il faudrait plus d'images, une meilleure résolution et un seuil de rejet. |
     """)
     return
 

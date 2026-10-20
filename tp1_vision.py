@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.25.0"
+__generated_with = "0.25.1"
 app = marimo.App(
     width="medium",
     app_title="TD 1 - Vision avancée et transfer learning",
@@ -377,9 +377,9 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
-    3. ...
+    1. Les trois modèles sont d'accord sur le chat et le café, mais pas sur la fusée (obélisque, missile, plateforme de forage). Leurs erreurs restent raisonnables : ce sont des objets hauts, fins et verticaux.
+    2. Pour l'astronaute, chaque modèle donne une classe différente avec une confiance faible (12 à 14 %), car il doit choisir parmi les 1000 classes. Une confiance faible peut alerter, mais elle ne suffit pas en production : ResNet se trompe sur la fusée avec 54 %.
+    3. ResNet-18 et DeiT-tiny sont les plus rapides (environ 60 ms contre 82 ms pour EfficientNet-B0, malgré moins de FLOPs). Je déploierais plutôt ResNet-18 : rapide et fiable sur les images connues.
     """)
     return
 
@@ -457,9 +457,14 @@ def _(mo):
 def _(nn):
     def retirer_tete(modele):
         """Remplace la couche de classification par nn.Identity() et renvoie le modèle."""
-        # TODO 1 : trouvez la tête de classification et remplacez-la par nn.Identity().
-        # La même fonction doit marcher pour les trois modèles.
-        raise NotImplementedError("À compléter")
+        if hasattr(modele, "fc"):
+            modele.fc = nn.Identity()
+        elif hasattr(modele, "classifier"):
+            modele.classifier = nn.Identity()
+        elif hasattr(modele, "head"):
+            modele.head = nn.Identity()
+        return modele
+
     return (retirer_tete,)
 
 
@@ -576,8 +581,8 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
+    1. EfficientNet-B0 donne les meilleurs embeddings (94,6 %). Ce n'est pas le modèle avec le plus de paramètres : il en a 4 M, contre 11,2 M pour ResNet-18.
+    2. EfficientNet-B0 offre le meilleur compromis : la meilleure accuracy, pour un temps presque égal à DeiT-tiny (42 ms contre 41 ms). ResNet-18 est le plus lent ici (63 ms).
     """)
     return
 
@@ -605,13 +610,14 @@ def _(mo):
 
 
 @app.cell
-def _(np):
+def _():
     from skimage.feature import hog
 
     def descripteurs_classiques(image):
         """image : PIL.Image -> vecteur numpy de longueur 1812 (HOG + histogrammes de couleur)."""
         # TODO 2
         raise NotImplementedError("À compléter")
+
     return (descripteurs_classiques,)
 
 
@@ -665,7 +671,7 @@ def _(
 def _(mo, resultat_classique, resultats_fe, tp):
     tableau_comparatif = [resultat_classique] + list(resultats_fe)
     mo.vstack([mo.md(f"Hasard : {1 / 37:.1%} (37 classes)."), tp.tableau(tableau_comparatif, mo)])
-    return (tableau_comparatif,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -748,17 +754,15 @@ def _(mo):
     return
 
 
-@app.cell
-def _(torch):
-    def creer_optimiseur(modele, lr_tete, lr_backbone):
-        """Renvoie un AdamW avec un learning rate pour la tête et un autre pour le backbone dégelé."""
-        # TODO 4
-        raise NotImplementedError("À compléter")
-    return (creer_optimiseur,)
+@app.function
+def creer_optimiseur(modele, lr_tete, lr_backbone):
+    """Renvoie un AdamW avec un learning rate pour la tête et un autre pour le backbone dégelé."""
+    # TODO 4
+    raise NotImplementedError("À compléter")
 
 
 @app.cell(hide_code=True)
-def _(creer_optimiseur, mo, ok_todo3, tests, tp):
+def _(mo, ok_todo3, tests, tp):
     tp.bloquer_si(not ok_todo3, mo, "Terminez le TODO 3 d'abord.")
     ok_todo4, _affichage = tp.verifier(tests.tests_optimiseur(creer_optimiseur, geler_backbone), mo)
     _affichage
@@ -847,7 +851,6 @@ def _(
     cfg_lr_backbone,
     cfg_lr_tete,
     classes,
-    creer_optimiseur,
     img_tr,
     img_va,
     mo,
@@ -974,7 +977,17 @@ def _(bouton_test, classes, img_te, mo, modele_ft, np, tp, y_te):
 
 
 @app.cell(hide_code=True)
-def _(descripteurs_classiques, historique_ft, img_te, mo, np, pred_ft, svm_classique, tp, y_te):
+def _(
+    descripteurs_classiques,
+    historique_ft,
+    img_te,
+    mo,
+    np,
+    pred_ft,
+    svm_classique,
+    tp,
+    y_te,
+):
     _ds = tp.DatasetImages(img_te, y_te, transform=lambda x: x)
     _f_te = np.stack([descripteurs_classiques(_ds.image_brute(i)) for i in range(len(_ds))])
     _acc_classique = float(np.mean(svm_classique.predict(_f_te) == np.asarray(y_te)))
@@ -1080,36 +1093,23 @@ def _(mo):
     return
 
 
-@app.cell
-def _(torch):
-    def grad_cam(modele, couche, image, classe=None):
-        """image : tenseur (1, 3, H, W). Renvoie une carte numpy (h, w) dans [0, 1] pour `classe`
-        (par défaut, la classe prédite)."""
-        # TODO 7
-        raise NotImplementedError("À compléter")
-    return (grad_cam,)
+@app.function
+def grad_cam(modele, couche, image, classe=None):
+    """image : tenseur (1, 3, H, W). Renvoie une carte numpy (h, w) dans [0, 1] pour `classe`
+    (par défaut, la classe prédite)."""
+    # TODO 7
+    raise NotImplementedError("À compléter")
 
 
 @app.cell(hide_code=True)
-def _(grad_cam, mo, tests, tp):
+def _(mo, tests, tp):
     ok_todo7, _affichage = tp.verifier(tests.tests_gradcam(grad_cam), mo)
     _affichage
     return (ok_todo7,)
 
 
 @app.cell
-def _(
-    classes,
-    ds_test_ft,
-    grad_cam,
-    mo,
-    modele_ft,
-    np,
-    ok_todo7,
-    pred_ft,
-    tp,
-    y_te,
-):
+def _(classes, ds_test_ft, mo, modele_ft, np, ok_todo7, pred_ft, tp, y_te):
     tp.bloquer_si(not ok_todo7, mo, "Terminez le TODO 7 pour appliquer Grad-CAM.")
     for _p in modele_ft.parameters():
         _p.requires_grad_(True)  # nécessaire si une partie du réseau était gelée
@@ -1165,17 +1165,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(
-    Image,
-    classes,
-    grad_cam,
-    mo,
-    modele_ft,
-    ok_todo7,
-    plt,
-    televersement,
-    tp,
-):
+def _(Image, classes, mo, modele_ft, ok_todo7, plt, televersement, tp):
     import io as _io
 
     mo.stop(not televersement.value, mo.md("En attente d'une image."))

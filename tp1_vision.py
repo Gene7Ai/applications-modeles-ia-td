@@ -956,12 +956,10 @@ def _(mo):
 
     | Étages dégelés | Époques | LR tête | LR backbone | Accuracy de validation | Durée |
     |---|---|---|---|---|---|
-    | 0 | | | | | |
-    | | | | | | |
+    | 0 | 3 | 3e-3 | 3e-4 | 74,3 % | 96 s |
+    | 2 | 3 | 3e-3 | 3e-4 | 78,1 % | 107 s |
 
-    Conclusion (à résolution égale, dégeler des étages vaut-il son coût par rapport à la tête seule ? Les écarts
-    dépassent-ils l'incertitude de mesure ? Comment le résultat se situe-t-il par rapport au meilleur score de
-    l'étape 4 ? Quelle configuration retenez-vous ?) : ...
+    Conclusion : dégeler 2 étages donne 3,8 points de plus pour seulement 11 s de plus, donc le coût est faible. Mais l'écart est proche de l'incertitude (± 4 points), donc il n'est pas tout à fait sûr. Les deux résultats restent bien en dessous de l'étape 4 (94,6 %), sûrement à cause de la résolution plus faible (160 au lieu de 224) et du petit nombre d'époques. Je retiens la configuration avec 2 étages dégelés.
     """)
     return
 
@@ -1047,8 +1045,13 @@ def _(mo):
 @app.function
 def paires_les_plus_confondues(matrice, noms, k=5):
     """matrice[i, j] = nombre d'images de classe i prédites j. Renvoie [(nom_i, nom_j, nombre), ...]."""
-    # TODO 6
-    raise NotImplementedError("À compléter")
+    paires = []
+    for i in range(len(noms)):
+        for j in range(len(noms)):
+            if i != j and matrice[i, j] > 0:
+                paires.append((noms[i], noms[j], int(matrice[i, j])))
+    paires.sort(key=lambda p: p[2], reverse=True)
+    return paires[:k]
 
 
 @app.cell(hide_code=True)

@@ -241,8 +241,15 @@ def _(mo):
 @app.function
 def iou(boite_a, boite_b):
     """IoU entre deux boîtes [x1, y1, x2, y2]. Renvoie un float dans [0, 1]."""
-    # TODO 1
-    raise NotImplementedError("À compléter")
+    x1 = max(boite_a[0], boite_b[0])
+    y1 = max(boite_a[1], boite_b[1])
+    x2 = min(boite_a[2], boite_b[2])
+    y2 = min(boite_a[3], boite_b[3])
+    inter = max(0, x2 - x1) * max(0, y2 - y1)
+    aire_a = (boite_a[2] - boite_a[0]) * (boite_a[3] - boite_a[1])
+    aire_b = (boite_b[2] - boite_b[0]) * (boite_b[3] - boite_b[1])
+    union = aire_a + aire_b - inter
+    return float(inter / union)
 
 
 @app.cell(hide_code=True)
@@ -277,8 +284,14 @@ def _(mo):
 def _(np):
     def nms(boites, scores, seuil_iou):
         """Non-Maximum Suppression. Renvoie la liste des indices conservés, par score décroissant."""
-        # TODO 2
-        raise NotImplementedError("À compléter")
+        restants = list(np.argsort(-scores))
+        gardes = []
+        while len(restants) > 0:
+            i = restants.pop(0)
+            gardes.append(int(i))
+            restants = [j for j in restants if iou(boites[i], boites[j]) <= seuil_iou]
+        return gardes
+
     return (nms,)
 
 
@@ -384,7 +397,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md(r"""
-    **Votre réponse :** ...
+    **Votre réponse :** Non, les classes ne sont pas équilibrées : 1770 boîtes pour Person mais seulement 88 pour no_boots, et environ 400 pour no_helmet. Les classes d'absence (no_boots, no_helmet...) risquent d'être les plus mal détectées, car elles sont rares et petites (moins de 2 % de l'image). C'est embêtant car ce sont justement les situations dangereuses que le système doit signaler.
     """)
     return
 
@@ -490,17 +503,22 @@ def _(mo):
     return
 
 
-@app.cell
-def _(cv2, np):
-    def boites_depuis_masque(masque, aire_min):
-        """Une boîte [x1, y1, x2, y2] par composante connexe d'au moins aire_min pixels."""
-        # TODO 3
-        raise NotImplementedError("À compléter")
-    return (boites_depuis_masque,)
+@app.function
+def boites_depuis_masque(masque, aire_min):
+    """Une boîte [x1, y1, x2, y2] par composante connexe d'au moins aire_min pixels."""
+    import cv2
+    import numpy as np
+    n, etiquettes, stats, centres = cv2.connectedComponentsWithStats(masque.astype(np.uint8))
+    boites = []
+    for i in range(1, n):
+        x, y, largeur, hauteur, aire = stats[i]
+        if aire >= aire_min:
+            boites.append([x, y, x + largeur, y + hauteur])
+    return boites
 
 
 @app.cell(hide_code=True)
-def _(boites_depuis_masque, mo, tests, tp):
+def _(mo, tests, tp):
     ok_todo3, _affichage = tp.verifier(tests.tests_boites_masque(boites_depuis_masque), mo)
     _affichage
     return (ok_todo3,)
@@ -530,8 +548,27 @@ def _(mo):
 @app.function
 def evaluer_detections(predictions, verites, seuil_iou=0.5):
     """predictions : liste de (boite, score) ; verites : liste de boîtes. Renvoie tp, fp, fn, precision, rappel."""
-    # TODO 4
-    raise NotImplementedError("À compléter")
+    predictions = sorted(predictions, key=lambda p: p[1], reverse=True)
+    associee = [False] * len(verites)
+    tp, fp = 0, 0
+    for boite, score in predictions:
+        meilleure_iou = 0
+        meilleur_j = -1
+        for j in range(len(verites)):
+            if not associee[j]:
+                v = iou(boite, verites[j])
+                if v > meilleure_iou:
+                    meilleure_iou = v
+                    meilleur_j = j
+        if meilleur_j >= 0 and meilleure_iou >= seuil_iou:
+            tp += 1
+            associee[meilleur_j] = True
+        else:
+            fp += 1
+    fn = len(verites) - tp
+    precision = tp / (tp + fp) if tp + fp > 0 else 0
+    rappel = tp / (tp + fn) if tp + fn > 0 else 0
+    return {"tp": tp, "fp": fp, "fn": fn, "precision": precision, "rappel": rappel}
 
 
 @app.cell(hide_code=True)
@@ -576,7 +613,7 @@ def _(images_val, mo):
 
 
 @app.cell
-def _(boites_depuis_masque, cv2, hsv_aire, hsv_sat, hsv_teinte, hsv_val, np):
+def _(cv2, hsv_aire, hsv_sat, hsv_teinte, hsv_val, np):
     def detecter_casques_couleur(image_rgb):
         """Baseline classique : renvoie (masque, liste de (boite, score)) pour une image RGB."""
         _hsv = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2HSV)
@@ -674,8 +711,8 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
+    1. La baseline fait les deux types d'erreurs : des oublis et des fausses alertes. Sur l'image d'exemple, elle ne trouve aucun casque : le casque orange n'est détecté qu'en partie (région trop petite), et les casques foncés ne sont pas de la bonne couleur. Le masque prend aussi des objets orange qui ne sont pas des casques, comme le poteau et la tenue de travail. Sur la validation : précision 20,7 %, rappel 11,4 %.
+    2. Non. L'absence de casque n'a pas de couleur : une règle de couleur peut seulement trouver un objet présent dans l'image, pas une tête sans casque.
     """)
     return
 
@@ -795,9 +832,9 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
-    3. ...
+    1. Les mieux détectées sont Person (AP@0.5 = 0,89), vest (0,85) et helmet (0,81) : ce sont des classes avec beaucoup d'exemples (plus de 1200 boîtes), et Person et vest sont grandes. Les moins bien détectées sont les absences : no_boots (0,02), no_goggle (0,16), no_gloves (0,17) et no_helmet (0,40). Elles ont peu d'exemples (88 seulement pour no_boots) et des boîtes petites.
+    2. Le mAP@0.5:0.95 demande des IoU plus élevées (jusqu'à 0,95), donc une boîte juste à 0,5 peut être fausse à 0,75 : il ne peut pas être plus grand que le mAP@0.5. L'écart est le plus grand pour les petits objets comme goggles (0,80 contre 0,35), helmet (0,81 contre 0,40) et gloves (0,77 contre 0,38) : quelques pixels d'erreur font beaucoup baisser l'IoU. Pour vest, plus grand, l'écart est plus petit (0,85 contre 0,53).
+    3. Mon fine-tuning a pris 184 s (30 % des images, 2 époques, 320 px). Pour le modèle fourni : 184 × (1 / 0,3) × (20 / 2) × (416 / 320)² ≈ 10 400 s, soit environ 2 h 50. C'est possible sur CPU pour un petit modèle, mais trop long pour tester plusieurs réglages : pour ce type de projet, il faut un GPU.
     """)
     return
 
@@ -837,8 +874,23 @@ def _(mo):
 @app.function
 def courbe_seuils(predictions_par_image, verites_par_image, seuils):
     """Précision, rappel et F1 cumulés sur toutes les images, pour chaque seuil de confiance."""
-    # TODO 5
-    raise NotImplementedError("À compléter")
+    resultat = {"seuil": [], "precision": [], "rappel": [], "f1": []}
+    for seuil in seuils:
+        tp, fp, fn = 0, 0, 0
+        for predictions, verites in zip(predictions_par_image, verites_par_image):
+            gardees = [(b, s) for b, s in predictions if s >= seuil]
+            r = evaluer_detections(gardees, verites)
+            tp += r["tp"]
+            fp += r["fp"]
+            fn += r["fn"]
+        p = tp / (tp + fp) if tp + fp > 0 else 0
+        r = tp / (tp + fn) if tp + fn > 0 else 0
+        f1 = 2 * p * r / (p + r) if p + r > 0 else 0
+        resultat["seuil"].append(seuil)
+        resultat["precision"].append(p)
+        resultat["rappel"].append(r)
+        resultat["f1"].append(f1)
+    return resultat
 
 
 @app.cell(hide_code=True)
@@ -1016,9 +1068,9 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
-    3. ...
+    1. Je retiens le seuil 0,15 pour no_helmet. Sur la validation, le meilleur F1 est à 0,20 (0,46), mais un oubli (une personne sans casque non signalée) coûte beaucoup plus cher qu'une fausse alerte. Avec un coût de 10 pour un oubli et de 1 pour une fausse alerte, 0,15 donne le coût le plus bas : rappel 53 %, précision 38 % sur la validation.
+    2. Non, c'est moins bien sur le test : rappel 30 % et précision 24 %, contre 53 % et 38 % sur la validation. Il y a seulement 45 objets no_helmet dans la validation et 40 dans le test, donc les chiffres sont peu précis : environ ± 14 points pour le rappel du test et ± 15 points pour celui de la validation. Je n'ai pas beaucoup confiance dans ces chiffres. Pour helmet (192 objets), c'est plus fiable : précision 93 % et rappel 87 % au seuil 0,45, contre 11 % et 7 % pour la baseline.
+    3. Sur les images de test (classe helmet), les oublis sont surtout des casques petits ou loin, des casques en partie cachés ou vus de côté, et des casques de vélo sur une photo prise de nuit, qui ne ressemblent pas aux casques de chantier. Pour no_helmet, il y a beaucoup d'erreurs : 28 oublis et 37 fausses alertes sur 40 objets.
     """)
     return
 
@@ -1195,7 +1247,7 @@ def _(mo):
 
 
 @app.cell
-def _(boites_depuis_masque, bouton_neu, cv2, mo, np, ok_todo3, ok_todo4, tp):
+def _(bouton_neu, cv2, mo, np, ok_todo3, ok_todo4, tp):
     tp.bloquer_si(not (ok_todo3 and ok_todo4), mo, "Terminez les TODO 3 et 4 d'abord.")
     mo.stop(not tp.lance(bouton_neu), mo.md("Cliquez pour lancer (plusieurs minutes sur CPU : trois époques de fine-tuning)."))
     _cible = tp.DONNEES / "neu-yolo"

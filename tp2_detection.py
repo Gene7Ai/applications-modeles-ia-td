@@ -1149,7 +1149,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md(r"""
-    **Votre réponse :** ...
+    **Votre réponse :** YOLO + SAM permet de compter les personnes, car il donne un masque séparé pour chaque personne. DeepLab met toutes les personnes dans une seule région : sur la première image, les personnes au fond sont mélangées avec celle du premier plan. DeepLab est le plus rapide : environ 0,6 à 0,7 s par image, contre environ 1,8 s pour YOLO + SAM (images 2 et 3). J'utiliserais DeepLab quand on veut seulement savoir où sont les personnes (par exemple une zone dangereuse occupée ou non) et qu'il faut aller vite, et YOLO + SAM quand il faut compter ou suivre chaque personne, ou pour pré-annoter des données.
     """)
     return
 
@@ -1209,14 +1209,14 @@ def _(mo):
     | Rubrique | Votre réponse |
     |---|---|
     | Problème métier | Détecter les personnes sans casque sur un chantier |
-    | Baseline classique et son score (test, classe casque : elle ne détecte pas l'absence de casque) | ... |
-    | Modèle retenu et pourquoi | ... |
-    | Métrique principale et score obtenu (test, classe `no_helmet`, au seuil retenu) | ... |
-    | Seuil retenu et justification métier | ... |
-    | Coût (entraînement, inférence, matériel) ; pour l'inférence, le modèle fourni a la même architecture que le YOLOv8n de l'étape 4 | ... |
-    | Principaux cas d'échec | ... |
-    | Le deep learning est-il justifié ici ? | ... |
-    | Déployable en l'état ? Sinon, que manque-t-il ? | ... |
+    | Baseline classique et son score (test, classe casque : elle ne détecte pas l'absence de casque) | Couleur HSV + composantes connexes : précision 11 %, rappel 7 % |
+    | Modèle retenu et pourquoi | YOLOv8n fine-tuné (modèle fourni, 20 époques, 416 px) : bien meilleur que la baseline sur les casques (précision 93 %, rappel 87 % au seuil 0,45), et assez léger pour un CPU |
+    | Métrique principale et score obtenu (test, classe `no_helmet`, au seuil retenu) | Rappel 30 % ± 14 points (40 objets), précision 24 % |
+    | Seuil retenu et justification métier | 0,15 : sur la validation, c'est le seuil avec le coût le plus bas si un oubli coûte 10 et une fausse alerte 1 ; un oubli peut causer un accident |
+    | Coût (entraînement, inférence, matériel) ; pour l'inférence, le modèle fourni a la même architecture que le YOLOv8n de l'étape 4 | Entraînement : 1 h 41 pour 20 époques (environ 2 h 50 estimé sur ma machine) ; inférence : environ 15 ms par image sur CPU |
+    | Principaux cas d'échec | no_helmet : 28 oublis et 37 fausses alertes sur 40 objets ; casques petits, loin ou cachés ; images différentes du chantier (casques de vélo, photo de nuit) |
+    | Le deep learning est-il justifié ici ? | Oui : la baseline ne peut pas détecter l'absence de casque, et sur les casques YOLO est beaucoup meilleur (rappel 87 % contre 7 %) |
+    | Déployable en l'état ? Sinon, que manque-t-il ? | Non : avec un rappel de 30 %, on rate 7 personnes sans casque sur 10. Il faudrait plus d'images no_helmet, un entraînement plus long (sur GPU), une résolution plus grande pour les petits objets, et une vérification humaine des alertes |
     """)
     return
 

@@ -331,6 +331,17 @@ def _(mo):
     return
 
 
+@app.cell
+def _(mo):
+    mo.md(r"""
+    **Remarque :** j'ai fait ce TD le 21 octobre 2026, avec le jeu Construction-PPE téléchargé le 20 octobre, donc
+    avant le changement du jeu de données par Ultralytics. Les résultats de ce notebook (1132 images en
+    entraînement, 143 en validation, 141 en test, scores, seuils) viennent de cette ancienne version et peuvent
+    changer si on relance le TD avec la nouvelle version.
+    """)
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     bouton_ppe = mo.ui.run_button(label="Charger Construction-PPE")

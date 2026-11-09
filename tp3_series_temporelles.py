@@ -913,15 +913,21 @@ def _(mo):
     return
 
 
-@app.function
-def erreur_reconstruction(modele, X):
-    """Une erreur quadratique moyenne par fenêtre : tableau numpy de forme (N,)."""
-    # TODO 7
-    raise NotImplementedError("À compléter")
+@app.cell
+def _(torch, tp):
+    def erreur_reconstruction(modele, X):
+        """Une erreur quadratique moyenne par fenêtre : tableau numpy de forme (N,)."""
+        x = torch.as_tensor(X, dtype=torch.float32).to(tp.appareil())
+        with torch.no_grad():
+            reconstruction = modele(x)
+        erreur = ((x - reconstruction) ** 2).mean(dim=(1, 2))
+        return erreur.cpu().numpy()
+
+    return (erreur_reconstruction,)
 
 
 @app.cell(hide_code=True)
-def _(mo, tests, tp):
+def _(erreur_reconstruction, mo, tests, tp):
     ok_todo7, _affichage = tp.verifier(tests.tests_erreur(erreur_reconstruction), mo)
     _affichage
     return (ok_todo7,)
@@ -946,8 +952,13 @@ def _(mo):
 @app.function
 def precision_rappel(scores, etiquettes, seuil):
     """Renvoie (precision, rappel) pour les alertes scores > seuil."""
-    # TODO 8
-    raise NotImplementedError("À compléter")
+    alertes = scores > seuil
+    vrais = (alertes & (etiquettes == 1)).sum()
+    n_alertes = alertes.sum()
+    n_anomalies = (etiquettes == 1).sum()
+    precision = vrais / n_alertes if n_alertes > 0 else 0
+    rappel = vrais / n_anomalies if n_anomalies > 0 else 0
+    return precision, rappel
 
 
 @app.cell(hide_code=True)
@@ -975,6 +986,7 @@ def _(
     A_tr,
     A_va,
     autoencodeur,
+    erreur_reconstruction,
     mo,
     np,
     ok_todo7,
@@ -1127,7 +1139,11 @@ def _(mo):
        cas, que faudrait-il prévoir pour un système qui reste en service plusieurs mois ?
     3. Quels types d'anomalies injectées sont les plus difficiles à détecter, et pourquoi ?
 
-    ...
+    Réponse 1 : Avec une panne 50 fois plus chère qu'un déplacement (coûts 2 et 100), le coût sur la validation est minimal au centile 50, le plus bas possible avec le curseur : il vaut mieux beaucoup d'alertes que rater une panne. Si l'équipe ne peut traiter que deux alertes par semaine, il faut un seuil beaucoup plus haut : la validation dure environ 17 semaines, donc environ 34 alertes, soit le centile 85. Mais sur le test, ce seuil ne trouve que 20 % des anomalies.
+
+    Réponse 2 : Pas tout à fait : au centile 50, on a presque le même nombre de fausses alertes (65 sur la validation, 67 sur le test), mais deux fois plus d'oublis sur le test (14 contre 7). Les scores médians sont proches (0,081 et 0,079), mais les scores élevés sont plus bas sur le test (une fenêtre sur dix dépasse 0,261 sur la validation, seulement 0,166 sur le test). Pour un système qui tourne plusieurs mois, il faut surveiller le nombre d'alertes et la distribution des scores, recalculer le seuil régulièrement et réentraîner l'autoencodeur sur des données normales récentes.
+
+    Réponse 3 : Le capteur figé est le plus difficile : une valeur qui ne bouge plus reste plausible et facile à reconstruire, donc l'erreur reste petite (deux capteurs figés sur trois presque jamais détectés). Les petits pics et le bruit sont aussi difficiles avec un seuil haut. La dérive est la mieux détectée, car le signal s'éloigne beaucoup de la normale.
     """)
     return
 
@@ -1146,14 +1162,14 @@ def _(mo):
     | Rubrique | Prévision de la température | Détection d'anomalies |
     |---|---|---|
     | Problème métier | Anticiper une surchauffe du transformateur | Alerter l'opérateur sur un comportement anormal |
-    | Baseline classique et son score | ... | ... |
-    | Modèle retenu et pourquoi | ... | ... |
-    | Métrique principale et score obtenu | ... | ... |
-    | Seuil ou réglage retenu, justification métier | ... | ... |
-    | Coût (entraînement, inférence, matériel) | ... | ... |
-    | Principaux cas d'échec | ... | ... |
-    | Le deep learning est-il justifié ici ? | ... | ... |
-    | Déployable en l'état ? Sinon, que manque-t-il ? | ... | ... |
+    | Baseline classique et son score | Ridge : MAE 1,146 °C (naïve : 1,269 °C) | ACP : AP 0,445 (Isolation Forest : 0,307) |
+    | Modèle retenu et pourquoi | Ridge : le meilleur score, et le plus simple et le plus rapide | Autoencodeur : meilleure AP (0,56 contre 0,445) |
+    | Métrique principale et score obtenu | MAE sur le test : 1,146 °C | AP 0,56 ; au seuil retenu, rappel 77 % et précision 41 % sur le test |
+    | Seuil ou réglage retenu, justification métier | 96 h d'entrée pour prévoir 24 h | Centile 50 des scores de validation : coût minimal si une panne coûte 50 fois une fausse alerte |
+    | Coût (entraînement, inférence, matériel) | 0,01 s d'entraînement, 2328 paramètres, CPU | Moins de 30 s d'entraînement sur CPU |
+    | Principaux cas d'échec | Changement de niveau entre les périodes (le test est beaucoup plus froid que l'entraînement) | Capteur figé, petits pics et bruit ; beaucoup de fausses alertes (67 en 4 mois) |
+    | Le deep learning est-il justifié ici ? | Non : les réseaux ne font pas mieux que Ridge, même avec la normalisation | Un peu : l'autoencodeur est meilleur que l'ACP, mais l'écart reste modéré |
+    | Déployable en l'état ? Sinon, que manque-t-il ? | Presque : il faut surveiller la dérive du niveau et réentraîner régulièrement | Non : les anomalies sont injectées, il faut tester sur de vraies pannes, réduire les fausses alertes et surveiller le seuil |
     """)
     return
 
@@ -1176,7 +1192,7 @@ def _(mo):
     classique a-t-elle fait jeu égal ou mieux ? Proposez une règle pratique pour décider, au début d'un
     projet, s'il faut investir dans un réseau de neurones.
 
-    ...
+    Le deep learning a nettement gagné sur les images : au TD 1, 94,6 % contre 15,7 % pour HOG + SVM, et au TD 2, YOLO trouve 87 % des casques contre 7 % pour la règle de couleur (et la baseline ne peut pas voir l'absence de casque). Sur les séries temporelles, la méthode classique fait aussi bien ou mieux : Ridge est le meilleur pour la prévision, et l'autoencodeur ne bat l'ACP que de peu. Règle pratique : commencer toujours par une baseline simple. Le deep learning vaut le coût quand les données sont des images (ou du texte, du son) et qu'on ne sait pas décrire les bonnes caractéristiques à la main. Pour des données simples ou peu nombreuses, on ne passe au réseau que si l'écart avec la baseline est grand.
     """)
     return
 
@@ -1210,7 +1226,15 @@ def _(mo):
 
 
 @app.cell
-def _(AutoencodeurConv, bouton_skab, mo, np, ok_todo7, tp):
+def _(
+    AutoencodeurConv,
+    bouton_skab,
+    erreur_reconstruction,
+    mo,
+    np,
+    ok_todo7,
+    tp,
+):
     tp.bloquer_si(not ok_todo7, mo, "Terminez le TODO 7 d'abord.")
     mo.stop(not tp.lance(bouton_skab), mo.md("Cliquez pour lancer (téléchargement de 4 Mo, puis environ 1 minute)."))
     skab = tp.charger_skab(progression=lambda it: mo.status.progress_bar(it, title="Téléchargement de SKAB"))

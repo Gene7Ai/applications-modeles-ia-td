@@ -502,7 +502,7 @@ def _(mo):
 
 
 @app.cell
-def _(nn):
+def _(nn, torch):
     class ConvCausale(nn.Module):
         def __init__(self, canaux_entree, canaux_sortie, noyau, dilatation):
             super().__init__()
@@ -511,8 +511,8 @@ def _(nn):
 
         def forward(self, x):  # x : (lot, canaux, temps)
             """Convolution qui conserve la longueur et ne regarde jamais le futur."""
-            # TODO 4
-            raise NotImplementedError("À compléter")
+            x = torch.nn.functional.pad(x, (self.marge, 0))
+            return self.conv(x)
 
     return (ConvCausale,)
 
@@ -573,8 +573,7 @@ def _(mo):
 @app.function
 def decouper_en_patches(x, taille, pas):
     """(lot, longueur) -> (lot, n_patches, taille)."""
-    # TODO 5
-    raise NotImplementedError("À compléter")
+    return x.unfold(1, taille, pas)
 
 
 @app.cell(hide_code=True)
@@ -634,8 +633,8 @@ def _(nn):
 
         def forward(self, x):  # x : (lot, longueur)
             """Le modèle interne prédit des écarts par rapport à la dernière valeur observée."""
-            # TODO 6
-            raise NotImplementedError("À compléter")
+            dernier = x[:, -1:]
+            return self.modele(x - dernier) + dernier
 
     return (PrevisionNormalisee,)
 
@@ -785,9 +784,9 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
-    3. ...
+    1. Sans normalisation par fenêtre, non : les trois réseaux font moins bien que la naïve (entre 1,78 et 1,88 °C contre 1,27 °C). Avec, oui : ils passent à environ 1,18-1,20 °C. La normalisation fait gagner environ 0,6 °C, alors que l'écart entre les trois architectures est de moins de 0,03 °C. Ici le prétraitement compte beaucoup plus que l'architecture.
+    2. Le meilleur modèle est la régression linéaire Ridge (1,146 °C). Elle a seulement 2328 paramètres et s'entraîne en 0,01 s, alors que les réseaux ont entre 18 712 et 85 656 paramètres et mettent entre 13 et 40 s.
+    3. Non, PatchTST (1,186 °C) est entre le TCN (1,177) et le LSTM (1,200), les écarts sont très petits. Il a aussi le plus de paramètres. Il pourrait être meilleur avec beaucoup plus de données (plusieurs années, beaucoup de séries ou de capteurs) et pour des horizons plus longs, où l'attention entre des patches éloignés devient utile.
     """)
     return
 

@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.25.0"
+__generated_with = "0.25.1"
 app = marimo.App(
     width="medium",
     app_title="TD 3 - Séries temporelles",
@@ -237,8 +237,8 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
+    1. Il y a un cycle par jour (plus chaud vers 16 h, plus froid vers 6 h), mais il est faible (environ 2 °C). Il y a aussi une saison : chaud en été, froid en hiver. Sur le long terme, la température baisse : la deuxième année est plus froide que la première.
+    2. Non, à la fin la température est beaucoup plus basse (environ 5 °C sur le test contre 17 °C en moyenne sur l'entraînement). Le modèle apprend sur des valeurs qu'il ne reverra plus, donc il risque de se tromper sur le niveau.
     """)
     return
 
@@ -262,8 +262,15 @@ def _(mo):
 @app.function
 def decouper_et_normaliser(valeurs, n_train, n_val, n_test):
     """Découpage chronologique puis normalisation avec les statistiques de l'entraînement."""
-    # TODO 1
-    raise NotImplementedError("À compléter")
+    train = valeurs[:n_train]
+    val = valeurs[n_train:n_train + n_val]
+    test = valeurs[n_train + n_val:n_train + n_val + n_test]
+    moyenne = train.mean(axis=0)
+    ecart_type = train.std(axis=0)
+    train = (train - moyenne) / ecart_type
+    val = (val - moyenne) / ecart_type
+    test = (test - moyenne) / ecart_type
+    return train, val, test, moyenne, ecart_type
 
 
 @app.cell(hide_code=True)
@@ -294,8 +301,14 @@ def _(mo):
 def _(np):
     def creer_fenetres(serie, taille_entree, horizon):
         """Série 1D -> X (N, taille_entree), Y (N, horizon)."""
-        # TODO 2
-        raise NotImplementedError("À compléter")
+        n = len(serie) - taille_entree - horizon + 1
+        X = []
+        Y = []
+        for i in range(n):
+            X.append(serie[i:i + taille_entree])
+            Y.append(serie[i + taille_entree:i + taille_entree + horizon])
+        return np.array(X), np.array(Y)
+
     return (creer_fenetres,)
 
 
@@ -356,13 +369,14 @@ def _(mo):
 def _(np):
     def prevision_naive(X, horizon):
         """Répète la dernière valeur observée."""
-        # TODO 3a
-        raise NotImplementedError("À compléter")
+        derniere = X[:, -1:]
+        return np.repeat(derniere, horizon, axis=1)
 
     def prevision_saisonniere(X, horizon, periode=24):
         """Recopie ce qui s'est passé une période plus tôt (horizon <= periode)."""
-        # TODO 3b
-        raise NotImplementedError("À compléter")
+        debut = X.shape[1] - periode
+        return X[:, debut:debut + horizon]
+
     return prevision_naive, prevision_saisonniere
 
 
@@ -435,7 +449,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md(r"""
-    **Votre réponse :** ...
+    **Votre réponse :** Non, la saisonnière fait moins bien que la naïve (1,541 °C contre 1,269 °C de MAE). Je pensais qu'elle serait meilleure à cause du cycle journalier, mais ce cycle est faible (environ 2 °C) par rapport aux changements d'un jour à l'autre (charge, météo). Copier la veille fait donc plus d'erreur que garder la dernière valeur, qui est plus proche.
     """)
     return
 
@@ -488,7 +502,7 @@ def _(mo):
 
 
 @app.cell
-def _(nn, torch):
+def _(nn):
     class ConvCausale(nn.Module):
         def __init__(self, canaux_entree, canaux_sortie, noyau, dilatation):
             super().__init__()
@@ -499,6 +513,7 @@ def _(nn, torch):
             """Convolution qui conserve la longueur et ne regarde jamais le futur."""
             # TODO 4
             raise NotImplementedError("À compléter")
+
     return (ConvCausale,)
 
 
@@ -621,6 +636,7 @@ def _(nn):
             """Le modèle interne prédit des écarts par rapport à la dernière valeur observée."""
             # TODO 6
             raise NotImplementedError("À compléter")
+
     return (PrevisionNormalisee,)
 
 
@@ -898,17 +914,15 @@ def _(mo):
     return
 
 
-@app.cell
-def _(torch):
-    def erreur_reconstruction(modele, X):
-        """Une erreur quadratique moyenne par fenêtre : tableau numpy de forme (N,)."""
-        # TODO 7
-        raise NotImplementedError("À compléter")
-    return (erreur_reconstruction,)
+@app.function
+def erreur_reconstruction(modele, X):
+    """Une erreur quadratique moyenne par fenêtre : tableau numpy de forme (N,)."""
+    # TODO 7
+    raise NotImplementedError("À compléter")
 
 
 @app.cell(hide_code=True)
-def _(erreur_reconstruction, mo, tests, tp):
+def _(mo, tests, tp):
     ok_todo7, _affichage = tp.verifier(tests.tests_erreur(erreur_reconstruction), mo)
     _affichage
     return (ok_todo7,)
@@ -930,17 +944,15 @@ def _(mo):
     return
 
 
-@app.cell
-def _(np):
-    def precision_rappel(scores, etiquettes, seuil):
-        """Renvoie (precision, rappel) pour les alertes scores > seuil."""
-        # TODO 8
-        raise NotImplementedError("À compléter")
-    return (precision_rappel,)
+@app.function
+def precision_rappel(scores, etiquettes, seuil):
+    """Renvoie (precision, rappel) pour les alertes scores > seuil."""
+    # TODO 8
+    raise NotImplementedError("À compléter")
 
 
 @app.cell(hide_code=True)
-def _(mo, precision_rappel, tests, tp):
+def _(mo, tests, tp):
     ok_todo8, _affichage = tp.verifier(tests.tests_precision_rappel(precision_rappel), mo)
     _affichage
     return (ok_todo8,)
@@ -964,13 +976,11 @@ def _(
     A_tr,
     A_va,
     autoencodeur,
-    erreur_reconstruction,
     mo,
     np,
     ok_todo7,
     ok_todo8,
     plt,
-    precision_rappel,
     tp,
     y_anomalie,
 ):
@@ -1027,7 +1037,6 @@ def _(
     np,
     ok_todo8,
     plt,
-    precision_rappel,
     scores_anomalie,
     scores_validation,
     seuil_centile,
@@ -1202,15 +1211,7 @@ def _(mo):
 
 
 @app.cell
-def _(
-    AutoencodeurConv,
-    bouton_skab,
-    erreur_reconstruction,
-    mo,
-    np,
-    ok_todo7,
-    tp,
-):
+def _(AutoencodeurConv, bouton_skab, mo, np, ok_todo7, tp):
     tp.bloquer_si(not ok_todo7, mo, "Terminez le TODO 7 d'abord.")
     mo.stop(not tp.lance(bouton_skab), mo.md("Cliquez pour lancer (téléchargement de 4 Mo, puis environ 1 minute)."))
     skab = tp.charger_skab(progression=lambda it: mo.status.progress_bar(it, title="Téléchargement de SKAB"))

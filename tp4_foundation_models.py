@@ -486,15 +486,18 @@ def _(mo):
     return
 
 
-@app.function
-def rechercher(emb_requete, emb_corpus, k=5):
-    """Indices des k éléments du corpus les plus proches de la requête (similarité cosinus décroissante)."""
-    # TODO 3
-    raise NotImplementedError("À compléter")
+@app.cell
+def _(np, similarite_cosinus):
+    def rechercher(emb_requete, emb_corpus, k=5):
+        """Indices des k éléments du corpus les plus proches de la requête (similarité cosinus décroissante)."""
+        sim = similarite_cosinus(emb_requete[None, :], emb_corpus)[0]
+        return np.argsort(-sim)[:k]
+
+    return (rechercher,)
 
 
 @app.cell(hide_code=True)
-def _(mo, ok_todo1, tests, tp):
+def _(mo, ok_todo1, rechercher, tests, tp):
     tp.bloquer_si(not ok_todo1, mo, "Terminez le TODO 1 d'abord.")
     ok_todo3, _affichage = tp.verifier(tests.tests_recherche(rechercher), mo)
     _affichage
@@ -534,6 +537,7 @@ def _(
     emb_corpus,
     mo,
     ok_todo3,
+    rechercher,
     requete,
     tp,
 ):
@@ -559,15 +563,18 @@ def _(mo):
     return
 
 
-@app.function
-def precision_a_k(indices, pertinents, k):
-    """Proportion d'images pertinentes parmi les k premiers résultats."""
-    # TODO 4
-    raise NotImplementedError("À compléter")
+@app.cell
+def _(np):
+    def precision_a_k(indices, pertinents, k):
+        """Proportion d'images pertinentes parmi les k premiers résultats."""
+        premiers = indices[:k]
+        return float(np.mean(pertinents[premiers]))
+
+    return (precision_a_k,)
 
 
 @app.cell(hide_code=True)
-def _(mo, tests, tp):
+def _(mo, precision_a_k, tests, tp):
     ok_todo4, _affichage = tp.verifier(tests.tests_precision_k(precision_a_k), mo)
     _affichage
     return (ok_todo4,)
@@ -581,7 +588,9 @@ def _(
     mo,
     ok_todo3,
     ok_todo4,
+    precision_a_k,
     presence,
+    rechercher,
     tp,
 ):
     tp.bloquer_si(not (ok_todo3 and ok_todo4), mo, "Terminez les TODO 3 et 4 pour évaluer le moteur.")
@@ -632,6 +641,7 @@ def _(
     mo,
     np,
     ok_todo3,
+    rechercher,
     tp,
 ):
     tp.bloquer_si(not ok_todo3, mo, "Terminez le TODO 3 d'abord.")
@@ -659,7 +669,9 @@ def _(mo):
     Laquelle retrouve le *contenu* (ce que font les personnes, ce qu'elles portent) ? Comparez la précision
     des différentes requêtes : lesquelles réussissent, lesquelles échouent, et comment l'expliquez-vous ?
 
-    ...
+    L'histogramme de couleur compare seulement la répartition des couleurs, sans savoir ce qu'il y a dans l'image. CLIP compare le sens de l'image : les personnes, ce qu'elles portent, le type de scène. Sur l'image 7, les deux méthodes trouvent les mêmes photos, car le corpus contient beaucoup de photos presque identiques du même ouvrier. Mais sur l'image 100 (des ouvriers avec casque et gilet orange), CLIP trouve d'autres ouvriers avec casque et gilet, alors que la couleur donne des photos sans rapport (une fanfare, un paysage) qui ont juste des couleurs proches. C'est donc CLIP qui retrouve le contenu.
+
+    Pour les requêtes texte, le casque et le gilet marchent parfaitement (précision à 10 de 1,0, contre 0,49 et 0,50 au hasard). Les lunettes (0,9) et les gants (0,8) sont un peu moins bien trouvés, ce sont des objets plus petits dans l'image. « a person without a helmet » échoue complètement (0,0) : CLIP comprend mal la négation, il voit surtout le mot « helmet » et renvoie des personnes avec un casque.
     """)
     return
 
@@ -1080,6 +1092,8 @@ def _(
     np,
     ok_todo3,
     ok_todo4,
+    precision_a_k,
+    rechercher,
     tp,
 ):
     tp.bloquer_si(not (ok_todo3 and ok_todo4), mo, "Terminez les TODO 3 et 4 d'abord.")

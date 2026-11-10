@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.25.0"
+__generated_with = "0.25.1"
 app = marimo.App(
     width="medium",
     app_title="TD 4 - Foundation models et IA générative",
@@ -229,8 +229,10 @@ def _(mo):
 def _(np):
     def similarite_cosinus(A, B):
         """A : (n, d), B : (m, d) -> tableau (n, m) des similarités cosinus."""
-        # TODO 1
-        raise NotImplementedError("À compléter")
+        A = A / np.linalg.norm(A, axis=1, keepdims=True)
+        B = B / np.linalg.norm(B, axis=1, keepdims=True)
+        return A @ B.T
+
     return (similarite_cosinus,)
 
 
@@ -260,8 +262,10 @@ def _(mo):
 def _(np, similarite_cosinus):
     def classer_zero_shot(emb_images, emb_textes, temperature=100):
         """Probabilité de chaque classe pour chaque image : softmax(temperature x cosinus)."""
-        # TODO 2
-        raise NotImplementedError("À compléter")
+        s = temperature * similarite_cosinus(emb_images, emb_textes)
+        e = np.exp(s)
+        return e / e.sum(axis=1, keepdims=True)
+
     return (classer_zero_shot,)
 
 
@@ -363,13 +367,14 @@ def _(mo):
 
     | Formulation | Accuracy sur les vignettes de réglage |
     |---|---|
-    | mots seuls, en anglais | |
-    | « a photo of a ... » | |
-    | descriptions précises | |
-    | en français | |
+    | mots seuls, en anglais | 61,9 % |
+    | « a photo of a ... » | 66,0 % |
+    | descriptions précises | 68,9 % |
+    | en français | 63,9 % |
 
-    Formulation retenue : ... Accuracy sur les vignettes mises de côté : ... Diffère-t-elle de l'accuracy de
-    réglage ? Pour quelles raisons pourrait-elle en différer ?
+    Les descriptions précises marchent le mieux (« a photo of a hard hat », « a high-visibility safety vest »...). Le modèle compare l'image à la phrase entière : CLIP a appris sur des légendes du web, donc une phrase qui ressemble à une vraie légende et qui décrit mieux l'objet donne un embedding de texte plus proche des images. Le français marche moins bien car CLIP a vu surtout de l'anglais.
+
+    Formulation retenue : descriptions précises. Accuracy sur les vignettes mises de côté : 70,8 %. Elle est un peu plus haute que sur le réglage (68,9 %). Elle peut différer car ce ne sont pas les mêmes vignettes : avec environ 240 images de chaque côté, quelques vignettes faciles ou difficiles suffisent à changer le score de quelques points. Remarque : j'ai cliqué sur la mesure trop tôt et j'ai vu aussi ce chiffre pour les autres formulations, mais le choix est le même avec les vignettes de réglage.
     """)
     return
 
@@ -456,9 +461,9 @@ def _(mo):
     mo.md(r"""
     **Votre réponse :**
 
-    1. ...
-    2. ...
-    3. ...
+    1. Oui, mais seulement à partir de 10 exemples par classe : la sonde linéaire fait 78,9 % contre 70,8 % pour le zéro-shot. Avec 5 exemples, elle fait encore moins bien (65,3 %).
+    2. La sonde linéaire est toujours bien meilleure que l'approche classique (par exemple 65,3 % contre 44,0 % avec 5 exemples). L'écart ne se réduit pas vraiment : il reste autour de 20 points, de 1 à 20 exemples (81,9 % contre 59,9 % avec 20 exemples).
+    3. Quand on n'a aucune image annotée et pas le temps ou le budget pour en annoter, par exemple pour chercher tout de suite dans les archives photo d'un chantier un nouvel équipement qui n'a jamais été étiqueté.
     """)
     return
 
@@ -481,17 +486,15 @@ def _(mo):
     return
 
 
-@app.cell
-def _(np, similarite_cosinus):
-    def rechercher(emb_requete, emb_corpus, k=5):
-        """Indices des k éléments du corpus les plus proches de la requête (similarité cosinus décroissante)."""
-        # TODO 3
-        raise NotImplementedError("À compléter")
-    return (rechercher,)
+@app.function
+def rechercher(emb_requete, emb_corpus, k=5):
+    """Indices des k éléments du corpus les plus proches de la requête (similarité cosinus décroissante)."""
+    # TODO 3
+    raise NotImplementedError("À compléter")
 
 
 @app.cell(hide_code=True)
-def _(mo, ok_todo1, rechercher, tests, tp):
+def _(mo, ok_todo1, tests, tp):
     tp.bloquer_si(not ok_todo1, mo, "Terminez le TODO 1 d'abord.")
     ok_todo3, _affichage = tp.verifier(tests.tests_recherche(rechercher), mo)
     _affichage
@@ -531,7 +534,6 @@ def _(
     emb_corpus,
     mo,
     ok_todo3,
-    rechercher,
     requete,
     tp,
 ):
@@ -557,17 +559,15 @@ def _(mo):
     return
 
 
-@app.cell
-def _(np):
-    def precision_a_k(indices, pertinents, k):
-        """Proportion d'images pertinentes parmi les k premiers résultats."""
-        # TODO 4
-        raise NotImplementedError("À compléter")
-    return (precision_a_k,)
+@app.function
+def precision_a_k(indices, pertinents, k):
+    """Proportion d'images pertinentes parmi les k premiers résultats."""
+    # TODO 4
+    raise NotImplementedError("À compléter")
 
 
 @app.cell(hide_code=True)
-def _(mo, precision_a_k, tests, tp):
+def _(mo, tests, tp):
     ok_todo4, _affichage = tp.verifier(tests.tests_precision_k(precision_a_k), mo)
     _affichage
     return (ok_todo4,)
@@ -581,9 +581,7 @@ def _(
     mo,
     ok_todo3,
     ok_todo4,
-    precision_a_k,
     presence,
-    rechercher,
     tp,
 ):
     tp.bloquer_si(not (ok_todo3 and ok_todo4), mo, "Terminez les TODO 3 et 4 pour évaluer le moteur.")
@@ -634,7 +632,6 @@ def _(
     mo,
     np,
     ok_todo3,
-    rechercher,
     tp,
 ):
     tp.bloquer_si(not ok_todo3, mo, "Terminez le TODO 3 d'abord.")
@@ -1083,8 +1080,6 @@ def _(
     np,
     ok_todo3,
     ok_todo4,
-    precision_a_k,
-    rechercher,
     tp,
 ):
     tp.bloquer_si(not (ok_todo3 and ok_todo4), mo, "Terminez les TODO 3 et 4 d'abord.")

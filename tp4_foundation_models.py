@@ -712,8 +712,8 @@ def _(mo):
 @app.function
 def bruiter(x0, t, alphas_cumules, bruit):
     """Saute directement à l'étape t du bruitage : x_t = racine(ac) x0 + racine(1 - ac) bruit."""
-    # TODO 5
-    raise NotImplementedError("À compléter")
+    coef = alphas_cumules[t].reshape(-1, *[1] * (x0.dim() - 1))
+    return coef.sqrt() * x0 + (1 - coef).sqrt() * bruit
 
 
 @app.cell(hide_code=True)
@@ -848,8 +848,10 @@ def _(mo):
 @app.function
 def etape_debruitage(x_t, t, bruit_predit, betas, alphas, alphas_cumules, z):
     """Calcule x_(t-1) à partir de x_t et du bruit prédit. z : bruit frais, ignoré quand t == 0."""
-    # TODO 6
-    raise NotImplementedError("À compléter")
+    moyenne = (x_t - betas[t] / (1 - alphas_cumules[t]).sqrt() * bruit_predit) / alphas[t].sqrt()
+    if t == 0:
+        return moyenne
+    return moyenne + betas[t].sqrt() * z
 
 
 @app.cell(hide_code=True)
@@ -899,13 +901,36 @@ def _(
 
 
 @app.cell
+def _(alphas, alphas_cumules, betas, debruiteur_2d, plt, points, torch):
+    torch.manual_seed(1)
+    _x = torch.randn(2000, 2)
+    with torch.no_grad():
+        for _t in range(len(betas) - 1, -1, -1):
+            _eps = debruiteur_2d(_x, torch.full((len(_x),), _t))
+            # même génération, mais avec z = 0 : on n'ajoute plus de bruit frais
+            _x = etape_debruitage(_x, _t, _eps, betas, alphas, alphas_cumules, torch.zeros_like(_x))
+    _fig, _ax = plt.subplots(1, 2, figsize=(6, 3))
+    _ax[0].scatter(_x[:, 0], _x[:, 1], s=1)
+    _ax[0].set_title("sans bruit frais z", fontsize=8)
+    _ax[1].scatter(points[:, 0], points[:, 1], s=1, color="tab:green")
+    _ax[1].set_title("vraies données", fontsize=8)
+    for _a in _ax:
+        _a.set_xlim(-3, 3)
+        _a.set_ylim(-3, 3)
+    _fig
+    return
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
     **Votre réponse :** les points générés sont-ils des copies des points d'entraînement, ou de nouveaux points
     qui suivent la même forme ? Que se passe-t-il si vous supprimez le bruit frais $z$ dans votre TODO 6
     (essayez, puis remettez-le) ?
 
-    ...
+    Ce sont de nouveaux points qui suivent la même forme : on retrouve les deux lunes, mais les points ne tombent pas exactement sur les points d'entraînement, le nuage est un peu plus large et plus flou que les vraies données. Le modèle a appris la forme, il ne recopie pas les données.
+
+    Sans le bruit frais z (essayé dans la cellule « sans bruit frais z », avec z = 0), tous les points se regroupent en une petite tache au centre et la forme des deux lunes disparaît. Sans z, chaque étape enlève seulement du bruit, donc les points vont tous vers une sorte de moyenne et on perd la diversité. Le bruit frais garde de la variété entre les points pendant la génération.
     """)
     return
 
@@ -986,7 +1011,9 @@ def _(mo):
     **Votre réponse :** comparez $g = 0$, $g = 2$ et $g = 5$ pour la même classe. Que gagne-t-on et que
     perd-on quand $g$ augmente ? Les 12 images sont-elles identiques ? D'où vient leur diversité ?
 
-    ...
+    Avec g = 0, la condition est ignorée : on obtient des vêtements de tous les types (t-shirts, sacs, robes, pulls) et presque aucune basket. Avec g = 2, les 12 images sont toutes des baskets, assez nettes et différentes entre elles (une est même montante). Avec g = 5, ce sont aussi des baskets, mais elles se ressemblent beaucoup, avec plus de contraste et des détails moins naturels. Quand g augmente, on gagne en respect de la condition, mais on perd en diversité et en qualité d'image.
+
+    Les 12 images ne sont pas identiques. Leur diversité vient du bruit de départ (un bruit pur différent pour chaque image) et du bruit frais z ajouté à chaque étape du débruitage.
     """)
     return
 
@@ -1023,13 +1050,13 @@ def _(mo):
     | Rubrique | Votre réponse |
     |---|---|
     | Problème métier | Retrouver dans une banque d'images de chantier les situations décrites par un responsable sécurité |
-    | Baseline classique et son score | ... |
-    | Modèle retenu et pourquoi | ... |
-    | Métrique principale et score obtenu | ... |
-    | Coût (annotation, entraînement, inférence, matériel) | ... |
-    | Principaux cas d'échec | ... |
-    | Le foundation model est-il justifié ici ? | ... |
-    | Déployable en l'état ? Sinon, que manque-t-il ? | ... |
+    | Baseline classique et son score | Histogrammes de couleur : ne permet pas de chercher avec un texte, et en recherche par l'image elle retrouve les couleurs, pas le contenu. En classification des vignettes : pixels + couleur + SVM, 44,0 % avec 5 exemples par classe |
+    | Modèle retenu et pourquoi | CLIP : on peut chercher avec une phrase, sans aucune annotation, et il retrouve le contenu des images |
+    | Métrique principale et score obtenu | Précision à 10 : 1,0 pour casque et gilet, 0,9 pour lunettes, 0,8 pour gants, mais 0,0 pour « sans casque ». Zéro-shot sur les vignettes : 70,8 % |
+    | Coût (annotation, entraînement, inférence, matériel) | Aucune annotation et aucun entraînement. On encode le corpus une seule fois sur CPU, puis chaque requête est un simple produit matriciel. Modèle de 600 Mo |
+    | Principaux cas d'échec | Les négations (« without a helmet ») ; les petits objets comme les gants ; les photos presque identiques qui remplissent les résultats |
+    | Le foundation model est-il justifié ici ? | Oui : sans annotation, il fait beaucoup mieux que la couleur, et il accepte n'importe quelle requête en texte |
+    | Déployable en l'état ? Sinon, que manque-t-il ? | Comme aide à la recherche, oui. Pas pour la sécurité : il ne sait pas trouver les personnes sans casque. Il faudrait l'évaluer sur plus de requêtes et garder une vérification humaine |
     """)
     return
 
@@ -1052,7 +1079,9 @@ def _(mo):
     et ce qui ne se compare pas. Dans quel cas partiriez-vous d'un foundation model, dans quel cas d'un modèle
     spécialisé ?
 
-    ...
+    Images annotées : le YOLO du TD 2 a eu besoin de 1132 images annotées (9098 boîtes). CLIP n'en demande aucune en zéro-shot, et 10 par classe suffisent pour que la sonde linéaire monte à 78,9 %. Temps avant un premier résultat : environ 1 h 40 d'entraînement pour le YOLO fourni (20 époques sur CPU), contre quelques minutes pour CLIP, juste le temps d'encoder les images. Qualité : le YOLO trouve les casques avec 93 % de précision et 87 % de rappel sur le test, CLIP nomme 70,8 % des vignettes en zéro-shot.
+
+    Ce qui se compare directement, c'est le coût : annotation et temps de calcul. La qualité ne se compare pas vraiment, car YOLO doit trouver et localiser 11 classes dans toute l'image, alors que CLIP doit seulement nommer un objet déjà découpé parmi 5 classes, avec une autre métrique. Je partirais d'un foundation model quand on n'a pas ou peu d'images annotées, qu'il faut un premier résultat vite, ou que les demandes changent (recherche libre). Je partirais d'un modèle spécialisé quand la tâche est fixe, qu'il faut localiser précisément les objets, aller vite sur une machine modeste, et qu'on peut annoter assez de données, par exemple pour un système d'alerte de sécurité.
     """)
     return
 

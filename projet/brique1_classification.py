@@ -73,7 +73,7 @@ def _(mo, tp):
     (images_train, y_train, images_val, y_val, images_test, y_test,
      noms) = tp.charger_neu(n_train_par_classe=180, n_val_par_classe=20, n_test_par_classe=100)
     mo.md(f"Entraînement : {len(images_train)} images, validation : {len(images_val)}, test : {len(images_test)}.")
-    return images_train, images_val, y_train, y_val
+    return images_test, images_train, images_val, noms, y_test, y_train, y_val
 
 
 @app.cell(hide_code=True)
@@ -149,15 +149,30 @@ def _(
             _acc = np.mean(_svm.predict(_x_va) == np.array(y_val))
             reglages_baseline.append({"descripteur": _nom, "C": _C, "accuracy validation": round(float(_acc), 3)})
     tp.tableau(reglages_baseline, mo)
-    return
+    return SVC, StandardScaler, hog_train, lbp_train, make_pipeline
 
 
 @app.cell
-def _():
-    # Votre baseline : remplacez cette ligne par votre code ; réglez-la sur la validation,
-    # puis gardez son score sur le test, mesuré une seule fois.
-    score_baseline = None
-    return (score_baseline,)
+def _(
+    SVC,
+    StandardScaler,
+    descripteur_hog,
+    descripteur_lbp,
+    hog_train,
+    images_test,
+    lbp_train,
+    make_pipeline,
+    np,
+    y_test,
+    y_train,
+):
+    # baseline retenue (HOG + LBP, C = 10) : entraînée sur l'entraînement, mesurée une seule fois sur le test
+    _x_train = np.hstack([hog_train, lbp_train])
+    _x_test = np.stack([np.concatenate([descripteur_hog(p), descripteur_lbp(p)]) for p in images_test])
+    _svm = make_pipeline(StandardScaler(), SVC(C=10)).fit(_x_train, y_train)
+    pred_baseline = _svm.predict(_x_test)
+    score_baseline = round(float(np.mean(pred_baseline == np.array(y_test))), 3)
+    return pred_baseline, score_baseline
 
 
 @app.cell(hide_code=True)
@@ -167,17 +182,92 @@ def _(mo):
 
     Quel modèle, quelle stratégie d'adaptation, quels réglages essayés (comparés sur la validation) ?
 
-    ...
+    Modèle : EfficientNet-B0 pré-entraîné sur ImageNet, utilisé en extraction de features : on garde le réseau tel quel et on entraîne une régression logistique sur ses embeddings. On a comparé la dernière couche (1280 valeurs) et des couches plus basses (features[:6], 112 valeurs), car NEU est loin d'ImageNet : c'est le cas « peu de données, domaine éloigné » du cours, où les couches basses peuvent mieux marcher.
+
+    Réglage sur la validation : la couche utilisée et C parmi 0,01, 0,1, 1 et 10. Le meilleur est la dernière couche avec C = 0,1 : 99,2 % sur la validation (une seule erreur sur 120), contre 98,3 % pour features[:6] et 95,0 % pour la baseline.
+
+    On n'a pas fait de fine-tuning. La feature extraction ne se trompe déjà que sur une image de validation : avec 120 images, un fine-tuning ne pourrait pas montrer de gain mesurable, alors qu'il demande un entraînement plus long sur CPU et des poids à sauvegarder.
+
+    Score sur le test : mesuré une seule fois, à la fin (partie 4).
     """)
     return
 
 
 @app.cell
-def _():
-    # Votre modèle : remplacez cette ligne par votre code ; réglez-le sur la validation,
-    # puis gardez son score sur le test, mesuré une seule fois.
-    score_modele = None
-    return (score_modele,)
+def _(images_train, images_val, mo, tp, y_train, y_val):
+    import torch.nn as nn
+
+    # même prétraitement que pour ImageNet (images 224 x 224), sans augmentation
+    _transfo = tp.transformation(224)
+    ds_train = tp.DatasetImages(images_train, y_train, _transfo)
+    ds_val = tp.DatasetImages(images_val, y_val, _transfo)
+
+    # 1) EfficientNet-B0 pré-entraîné, sans sa tête : 1280 valeurs par image
+    effnet = tp.charger_modele("efficientnet_b0")
+    effnet.classifier = nn.Identity()
+    emb_train = tp.extraire_embeddings(effnet, ds_train)
+    emb_val = tp.extraire_embeddings(effnet, ds_val)
+
+    # 2) seulement les premiers étages (features[:6]), moyennés : 112 valeurs par image.
+    # NEU est loin d'ImageNet, les couches basses (textures) pourraient mieux marcher
+    _effnet_complet = tp.charger_modele("efficientnet_b0")
+    effnet_bas = nn.Sequential(_effnet_complet.features[:6], nn.AdaptiveAvgPool2d(1), nn.Flatten())
+    emb_bas_train = tp.extraire_embeddings(effnet_bas, ds_train)
+    emb_bas_val = tp.extraire_embeddings(effnet_bas, ds_val)
+
+    mo.md(f"Embeddings : {emb_train.shape[1]} valeurs (dernière couche), {emb_bas_train.shape[1]} valeurs (features[:6]).")
+    return effnet, emb_bas_train, emb_bas_val, emb_train, emb_val
+
+
+@app.cell
+def _(
+    StandardScaler,
+    emb_bas_train,
+    emb_bas_val,
+    emb_train,
+    emb_val,
+    make_pipeline,
+    mo,
+    np,
+    tp,
+    y_train,
+    y_val,
+):
+    from sklearn.linear_model import LogisticRegression
+
+    # régression logistique sur les embeddings, C réglé sur la validation
+    reglages_deep = []
+    for _nom, (_e_tr, _e_va) in {"EfficientNet-B0, dernière couche": (emb_train, emb_val),
+                                  "EfficientNet-B0, features[:6]": (emb_bas_train, emb_bas_val)}.items():
+        for _C in [0.01, 0.1, 1, 10]:
+            _clf = make_pipeline(StandardScaler(), LogisticRegression(max_iter=3000, C=_C)).fit(_e_tr, y_train)
+            _acc = np.mean(_clf.predict(_e_va) == np.array(y_val))
+            reglages_deep.append({"modèle": _nom, "C": _C, "accuracy validation": round(float(_acc), 3)})
+    tp.tableau(reglages_deep, mo)
+    return (LogisticRegression,)
+
+
+@app.cell
+def _(
+    LogisticRegression,
+    StandardScaler,
+    effnet,
+    emb_train,
+    images_test,
+    make_pipeline,
+    np,
+    tp,
+    y_test,
+    y_train,
+):
+    # modèle retenu (dernière couche d'EfficientNet-B0 + régression logistique, C = 0,1),
+    # mesuré une seule fois sur le test
+    _ds_test = tp.DatasetImages(images_test, y_test, tp.transformation(224))
+    emb_test = tp.extraire_embeddings(effnet, _ds_test)
+    _clf = make_pipeline(StandardScaler(), LogisticRegression(max_iter=3000, C=0.1)).fit(emb_train, y_train)
+    pred_modele = _clf.predict(emb_test)
+    score_modele = round(float(np.mean(pred_modele == np.array(y_test))), 3)
+    return pred_modele, score_modele
 
 
 @app.cell(hide_code=True)
@@ -188,19 +278,57 @@ def _(mo):
     Tableau comparatif (mêmes données, même métrique pour toutes les méthodes), cas d'échec, seuil ou réglage
     retenu et sa justification en termes de coût métier.
 
-    ...
+    Les deux méthodes sont mesurées une seule fois, sur les mêmes 600 images de test et avec la même métrique (l'accuracy).
+
+    - Baseline HOG + LBP + SVM : 93,5 % (± 2,0 points, intervalle de confiance à 95 %). Elle se trompe surtout sur patches (86 %) et scratches (91 %) : des plaques prises pour des craquelures ou des rayures, et des rayures prises pour des inclusions.
+    - EfficientNet-B0 + régression logistique : 99,7 % (± 0,5 point), soit 2 erreurs sur 600. Les deux erreurs sont des inclusions (98 % sur ce type), prédites pitted_surface et scratches. Sur ces deux images, l'inclusion est une suite de petites taches allongées sur une ligne : elle ressemble à des piqûres ou à une rayure, l'erreur se comprend.
+
+    Les scores du test sont proches de ceux de la validation (95,0 % et 99,2 %). L'écart entre les deux méthodes (6 points) est bien plus grand que l'incertitude.
+
+    Seuil : pour reconnaître le type, il n'y a pas de seuil à régler, on garde le type le plus probable. Ici une erreur donne un défaut mal nommé, pas un défaut manqué. Le seuil d'alerte (défaut non vu contre fausse alerte) est choisi dans la brique 2, avec la localisation.
     """)
     return
 
 
 @app.cell
-def _(mo, score_baseline, score_modele, tp):
-    # Une ligne par méthode, la même métrique pour toutes ; ajoutez ensuite vos figures et vos cas d'échec.
-    tableau_final = [
-        {"méthode": "baseline classique", "score sur le test": score_baseline},
-        {"méthode": "deep learning", "score sur le test": score_modele},
-    ]
+def _(
+    mo,
+    noms,
+    np,
+    pred_baseline,
+    pred_modele,
+    score_baseline,
+    score_modele,
+    tp,
+    y_test,
+):
+    # accuracy globale, puis type par type : une accuracy globale peut cacher un type mal reconnu
+    _y = np.array(y_test)
+    tableau_final = []
+    for _nom, _pred, _score in [("HOG + LBP + SVM (baseline)", pred_baseline, score_baseline),
+                                ("EfficientNet-B0 + régression logistique", pred_modele, score_modele)]:
+        _ligne = {"méthode": _nom, "accuracy test": _score}
+        for _k, _n in enumerate(noms):
+            _ligne[_n] = round(float(np.mean(_pred[_y == _k] == _k)), 2)
+        tableau_final.append(_ligne)
     tp.tableau(tableau_final, mo)
+    return
+
+
+@app.cell
+def _(images_test, mo, noms, np, pred_baseline, pred_modele, tp, y_test):
+    # matrices de confusion sur le test, puis les images où le modèle retenu se trompe
+    _, _fig_baseline = tp.matrice_confusion(y_test, pred_baseline, noms, taille=4)
+    _, _fig_modele = tp.matrice_confusion(y_test, pred_modele, noms, taille=4)
+    _erreurs = np.flatnonzero(pred_modele != np.array(y_test))
+    _images = [tp.Image.open(images_test[i]) for i in _erreurs]
+    _titres = [f"réel {noms[y_test[i]]}\nprédit {noms[pred_modele[i]]}" for i in _erreurs]
+    mo.vstack([
+        mo.hstack([mo.vstack([mo.md("**Baseline**"), _fig_baseline]),
+                   mo.vstack([mo.md("**EfficientNet-B0**"), _fig_modele])]),
+        mo.md(f"**Erreurs du modèle retenu sur le test : {len(_erreurs)}**"),
+        tp.grille(_images, _titres, n_col=4, taille=2.2, cmap="gray"),
+    ])
     return
 
 

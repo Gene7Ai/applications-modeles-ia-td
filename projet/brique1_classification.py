@@ -59,17 +59,20 @@ def _(mo):
     Quelle question métier cette brique traite-t-elle ? Quelles données, en quelle quantité, comment
     sont-elles découpées (entraînement, validation, test) ?
 
-    ...
+    L'usine veut savoir si un modèle peut reconnaître le type d'un défaut sur une photo de tôle, pour aider les opérateurs qui contrôlent les tôles à l'œil. Cette brique traite seulement le type de défaut (la localisation est dans la brique 2).
+
+    Données : NEU-DET, 1800 images de tôles d'acier en niveaux de gris (200 x 200 pixels), 300 par type de défaut, six types : crazing, inclusion, patches, pitted_surface, rolled-in_scale et scratches. On utilise le même découpage pour tout le projet (tp.decoupage_neu()) : par type, 100 images de test, 20 de validation et 180 d'entraînement, soit 1080 images d'entraînement, 120 de validation et 600 de test. Tous les réglages se font sur la validation, et le test ne sert qu'une fois, à la fin.
     """)
     return
 
 
 @app.cell
-def _(tp):
-    # Chargement et découpage des données. Exemple pour les images NEU (voir outils/tp_utils.py) :
-    # (images_train, y_train, images_val, y_val, images_test, y_test,
-    #  noms) = tp.charger_neu(n_train_par_classe=30, n_val_par_classe=20, n_test_par_classe=100)
-    dossier_donnees = tp.DONNEES
+def _(mo, tp):
+    # Découpage commun à tout le projet (le même que tp.decoupage_neu()) :
+    # par type de défaut, 100 images de test, 20 de validation, et le reste (180) pour l'entraînement
+    (images_train, y_train, images_val, y_val, images_test, y_test,
+     noms) = tp.charger_neu(n_train_par_classe=180, n_val_par_classe=20, n_test_par_classe=100)
+    mo.md(f"Entraînement : {len(images_train)} images, validation : {len(images_val)}, test : {len(images_test)}.")
     return
 
 

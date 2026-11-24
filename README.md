@@ -4,7 +4,8 @@ Module ING3 option IA, CY Tech
 
 Chaque TD est un notebook **marimo** : un simple fichier Python que l'on ouvre dans le navigateur, avec des
 cellules à exécuter, du code à compléter et des tests automatiques. Les fichiers se versionnent proprement
-avec Git : c'est votre copie de ce dépôt, complétée, que vous rendez à la fin du module.
+avec Git : vos TD complétés sont rendus à la fin du module, avec le projet, sur le dépôt de votre groupe
+(voir « Rendu »).
 
 Les TD sont mis en ligne ici au fur et à mesure, un par séance. **Vous clonez ce dépôt une seule fois**, au
 TD 1. Ensuite, au début de chaque séance, une seule commande récupère le nouveau TD dans votre dossier, à côté
@@ -150,21 +151,25 @@ outils/                                     code fourni (chargement, affichage, 
 cours/                                      diapositives de chaque jour (PDF), mises en ligne avec le TD, et sujet du projet
 recuperer_td.py                             récupère le TD suivant (uv run python recuperer_td.py)
 modeles/                                    modèles fournis et poids pré-entraînés téléchargés
-projet/                                     vos briques du projet Usine 4.0 (partez de brique_modele.py)
+projet/                                     le sujet du projet Usine 4.0 (SUJET.md)
 sorties/                                    résultats d'entraînement (non versionnés)
 __marimo__/                                 copies des notebooks avec leurs sorties, créées par marimo (à versionner)
 ```
 
 ## Rendu
 
-Faites des commits réguliers (au moins un par séance) et poussez-les sur votre dépôt privé (`git push`) :
-l'historique Git fait partie de l'évaluation.
+Faites des commits réguliers (au moins un par séance) et poussez-les (`git push`) : l'historique Git fait
+partie de l'évaluation.
 
 Un notebook marimo est un fichier Python : il contient votre code et vos réponses, mais pas vos résultats
 (figures, tableaux, scores). Pendant que vous travaillez, marimo enregistre donc à côté de chaque notebook une
-copie avec ses sorties, dans un dossier `__marimo__/` (par exemple `__marimo__/tp1_vision.html`, ou
-`projet/__marimo__/brique1_classification.html`). Ajoutez ces fichiers `.html` à vos commits : ce sont eux
-qui montrent ce que vous avez obtenu.
+copie avec ses sorties, dans un dossier `__marimo__/` (par exemple `__marimo__/tp1_vision.html`). Ajoutez ces
+fichiers `.html` à vos commits : ce sont eux qui montrent ce que vous avez obtenu.
+
+Tout se rend sur le **dépôt du groupe** du projet Usine 4.0 : le projet dans `projet/`, et les TD de chaque
+membre dans son propre dossier (`prenom_nom/`, avec les `.py` et les `.html`). Les TD comptent pour un bonus
+individuel. L'architecture de ce dépôt, le modèle de README et la façon de le créer sont dans
+`projet/SUJET.md`.
 
 ## Licences
 

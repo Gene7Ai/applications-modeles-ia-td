@@ -1347,7 +1347,7 @@ def _(bouton_neu, cv2, mo, np, ok_todo3, ok_todo4, tp):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **À poursuivre dans `projet/brique2_localisation.py`**, copie de `projet/brique_modele.py` (à rendre avec le projet)
+    **Pistes pour le projet** (le code du projet est un pipeline, dans `projet/`)
 
     1. Entraînez YOLO plus longtemps (laissez tourner pendant une pause ou le soir) et suivez le mAP par classe.
        Quels défauts sont les plus difficiles à localiser ? Pourquoi (forme, contraste, contour flou) ?

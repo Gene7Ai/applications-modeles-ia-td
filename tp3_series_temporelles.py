@@ -66,7 +66,7 @@ def _(mo):
     | 6 | Choisir un seuil d'alerte : le coût métier | 15 min |
     | 7 | Fiche de décision ingénieur | 10 min |
     | 8 | Bilan : deep learning ou classique ? | 10 min |
-    | 9 | Brique projet Usine 4.0 (volet au choix) : anticiper les pannes d'une pompe | 30 min |
+    | 9 | Brique projet Usine 4.0 : anticiper les pannes d'une pompe | 30 min |
     """)
     return
 
@@ -1176,14 +1176,14 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Étape 9 — Brique projet Usine 4.0 (volet au choix) : anticiper les pannes d'une pompe
+    ## Étape 9 — Brique projet Usine 4.0 : anticiper les pannes d'une pompe
 
     **SKAB** : les capteurs d'une pompe à eau d'un banc d'essai (vibrations, courant, pression, température,
     tension, débit), une mesure par seconde. Les expérimentateurs ont provoqué de vraies anomalies, par
     exemple en fermant progressivement une vanne, et les ont étiquetées. Contrairement à l'exercice précédent,
     les anomalies sont donc **réelles**.
 
-    Dans le projet, c'est le volet « maintenance », l'un des deux volets au choix (voir `projet/SUJET.md`).
+    Dans le projet, c'est la partie « maintenance des pompes », obligatoire (voir `projet/SUJET.md`).
 
     Deux façons de définir le « normal » sont comparées :
 
@@ -1256,8 +1256,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **Si votre groupe choisit le volet maintenance**, poursuivez dans `projet/`, par exemple dans une copie de
-    `projet/brique_modele.py` (l'organisation du dossier est libre).
+    **Pistes pour la partie maintenance du projet** (le code du projet est un pipeline, dans `projet/`).
 
     1. Lequel des deux protocoles donne les meilleurs résultats ? Le protocole A voit pourtant *plus* de
        données normales : comparez les distributions des capteurs entre `anomaly-free` et le début des

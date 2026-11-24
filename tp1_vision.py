@@ -1304,7 +1304,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **À poursuivre dans `projet/brique1_classification.py`**, copie de `projet/brique_modele.py` (à rendre avec le projet)
+    **Pistes pour le projet** (le code du projet est un pipeline, dans `projet/`)
 
     1. Remplacez les histogrammes de couleur, redondants sur des images en niveaux de gris (les trois canaux sont
        identiques : il ne reste qu'un histogramme d'intensité), par un descripteur de

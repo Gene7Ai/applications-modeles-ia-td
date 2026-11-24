@@ -68,7 +68,7 @@ def _(mo):
     | 5 | Diffusion : générer des images, avec une condition | 25 min |
     | 6 | Fiche de décision ingénieur | 10 min |
     | 7 | Bilan : que change un foundation model ? | 10 min |
-    | 8 | Brique projet Usine 4.0 (volet au choix) : les défauts rares | 30 min |
+    | 8 | Brique projet Usine 4.0 : les défauts rares | 30 min |
     """)
     return
 
@@ -1053,12 +1053,12 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Étape 8 — Brique projet Usine 4.0 (volet au choix) : les défauts rares
+    ## Étape 8 — Brique projet Usine 4.0 : les défauts rares
 
     Dans une usine, certains défauts n'apparaissent que quelques fois par an : on n'a presque pas d'images pour
     entraîner un modèle. Pour le simuler, on choisit un type de défaut du jeu NEU, la **classe rare**, et on le
-    réduit à 15 images dans l'entraînement. Dans le projet, c'est le volet « défauts rares », l'un des deux volets
-    au choix (voir `projet/SUJET.md`). Deux pistes, au choix.
+    réduit à 15 images dans l'entraînement. Dans le projet, c'est la partie « défauts rares », obligatoire
+    (voir `projet/SUJET.md`). Deux pistes, au choix.
 
     **Piste A — Retrouver les défauts similaires.** Un opérateur photographie un défaut inconnu : le système
     lui montre les cas les plus proches de l'historique. La cellule ci-dessous pose la base avec CLIP.
@@ -1116,8 +1116,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **Si votre groupe choisit le volet défauts rares**, poursuivez dans `projet/`, par exemple dans une copie de
-    `projet/brique_modele.py` (l'organisation du dossier est libre).
+    **Pistes pour la partie défauts rares du projet** (le code du projet est un pipeline, dans `projet/`).
 
     *Piste A*
 

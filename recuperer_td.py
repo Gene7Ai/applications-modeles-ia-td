@@ -17,8 +17,8 @@ import sys
 
 DEPOT_PROF = "FranklinB13/applications-modeles-ia-td"
 # Fichiers fournis, que les étudiants ne modifient pas : en cas de conflit, on reprend la version de l'enseignant.
-FOURNIS = ("outils/", "modeles/", "pyproject.toml", "uv.lock", "README.md", "verifier_installation.py",
-           "recuperer_td.py", ".gitignore", ".python-version", "projet/brique_modele.py")
+FOURNIS = ("outils/", "modeles/", "pyproject.toml", "uv.lock", "verifier_installation.py",
+           "recuperer_td.py", ".gitignore", ".python-version")
 
 
 def git(*args, verifier=True):

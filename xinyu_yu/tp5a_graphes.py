@@ -21,7 +21,7 @@ def _():
     import torch
     import torch.nn as nn
 
-    sys.path.insert(0, str(Path(mo.notebook_dir()) / "outils"))
+    sys.path.insert(0, str(Path(mo.notebook_dir()).parent / "outils"))
     import tests_tp5 as tests
     import tp_utils as tp
 

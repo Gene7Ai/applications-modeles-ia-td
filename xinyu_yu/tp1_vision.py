@@ -26,7 +26,7 @@ def _():
     from sklearn.preprocessing import StandardScaler
     from sklearn.svm import SVC
 
-    sys.path.insert(0, str(Path(mo.notebook_dir()) / "outils"))
+    sys.path.insert(0, str(Path(mo.notebook_dir()).parent / "outils"))
     import tests_tp1 as tests
     import tp_utils as tp
 

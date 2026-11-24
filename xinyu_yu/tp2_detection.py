@@ -21,7 +21,7 @@ def _():
     import torch
     from PIL import Image
 
-    sys.path.insert(0, str(Path(mo.notebook_dir()) / "outils"))
+    sys.path.insert(0, str(Path(mo.notebook_dir()).parent / "outils"))
     import tests_tp2 as tests
     import tp_utils as tp
 

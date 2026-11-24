@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.25.0"
+__generated_with = "0.25.1"
 app = marimo.App(
     width="medium",
     app_title="TD 5b - Apprentissage par renforcement",
@@ -240,7 +240,7 @@ def _(mo):
     **Votre réponse :** à partir de quelle valeur de `k` la règle atteint-elle le score maximal ? Qu'a-t-il fallu
     **savoir** sur le problème pour écrire cette règle ? Gardez votre réponse en tête : elle servira à l'étape 7.
 
-    ...
+    La règle atteint le score maximal dès k = 0,05, et le garde jusqu'à k = 0,65 environ. Au-delà, le score baisse un peu (462 pour k = 1). Avec k = 0, elle ne fait que 44. Pour écrire cette règle, il a fallu savoir comment marche le problème : quelle valeur de l'état est l'angle du mât, de quel côté il faut pousser, et qu'il faut anticiper avec la vitesse angulaire.
     """)
     return
 
@@ -295,8 +295,10 @@ def _(mo):
 def _(np):
     def choisir_action(q_valeurs, epsilon, rng):
         """Politique epsilon-gloutonne. Renvoie le numéro (int) de l'action choisie."""
-        # TODO 1
-        raise NotImplementedError("À compléter")
+        if rng.random() < epsilon:
+            return int(rng.integers(len(q_valeurs)))
+        return int(np.argmax(q_valeurs))
+
     return (choisir_action,)
 
 
@@ -333,8 +335,12 @@ def _(mo):
 def _(np):
     def mise_a_jour_q(Q, etat, action, recompense, etat_suivant, termine, alpha, gamma):
         """Applique une étape de Q-learning à la table Q (modifiée sur place)."""
-        # TODO 2
-        raise NotImplementedError("À compléter")
+        if termine:
+            cible = recompense
+        else:
+            cible = recompense + gamma * np.max(Q[etat_suivant])
+        Q[etat][action] += alpha * (cible - Q[etat][action])
+
     return (mise_a_jour_q,)
 
 
@@ -488,7 +494,11 @@ def _(mo):
     3. Avec ce découpage, la table a 2 304 états. Combien en aurait-elle si l'état comptait 20 nombres découpés
        chacun en 8 intervalles ? Et si l'état était une image ? Concluez sur la limite de l'approche.
 
-    ...
+    Réponse 1 : Oui, sans rien savoir de la physique, la table fait bien mieux que le hasard et que la règle simple sur l'angle. Mais elle reste très loin de la règle avec anticipation, qui atteint 500.
+
+    Réponse 2 : L'écart est grand : de 127 à 173 alors que seul le hasard change. Un seul essai ne suffit donc pas pour juger la méthode, il faut en lancer plusieurs et regarder la moyenne et l'écart. Avec gamma = 0,5, l'agent ne regarde que quelques pas devant lui et le score tombe à 67.
+
+    Réponse 3 : Avec 20 nombres découpés en 8 intervalles, la table aurait 8^20, soit environ 10^18 états, beaucoup trop pour être remplie : déjà ici, l'agent n'a visité que 12 à 14 % des 2304 états. Avec une image, chaque pixel serait une dimension et ce serait encore pire. Une table ne généralise pas d'une case à la case voisine, l'approche ne marche donc que pour de très petits états.
     """)
     return
 
@@ -560,8 +570,8 @@ def _(mo):
 @app.function
 def cibles_dqn(recompenses, q_suivants, termines, gamma):
     """Cibles de régression de DQN, une par transition, sans gradient."""
-    # TODO 3
-    raise NotImplementedError("À compléter")
+    cibles = recompenses + gamma * (1 - termines) * q_suivants.max(dim=1).values
+    return cibles.detach()
 
 
 @app.cell(hide_code=True)
@@ -711,7 +721,11 @@ def _(mo):
     3. Si vous n'aviez lancé qu'un seul essai, qu'auriez-vous conclu ? Que faut-il exiger d'un résultat publié
        en apprentissage par renforcement ?
 
-    ...
+    Réponse 1 : Non, les courbes ne montent pas régulièrement. Essai 1 : il monte à 398 vers 12 500 pas puis redescend, atteint 500 à 22 500 pas, retombe à 74 à 27 500 pas, puis revient à 500. Essai 2 : il reste entre 94 et 185 presque tout le temps et ne monte à 430 qu'au dernier point. Essai 3 : il atteint 500 à 27 500 pas puis retombe à 256 à la fin. Il y a des chutes brusques, contrairement à un entraînement supervisé.
+
+    Réponse 2 : À 20 000 pas, les trois essais auraient eu 137, 169 et 270 ; à 25 000 pas, 500, 150 et 402. Le score dépend beaucoup du moment où on s'arrête, et le dernier réseau peut tomber juste après une chute : on garde donc le meilleur réseau évalué. Mais ce réseau a été choisi sur ses épisodes d'évaluation, donc son score sur ces épisodes est trop optimiste. Il faut le mesurer sur d'autres épisodes, comme on garde un test séparé de la validation.
+
+    Réponse 3 : Avec un seul essai, on aurait pu conclure que DQN marche parfaitement (essai 1 ou 3) ou qu'il ne marche presque pas (essai 2 jusqu'à 27 500 pas). Pour un résultat publié en renforcement, il faut plusieurs essais avec des graines différentes, la moyenne et l'écart entre les essais, et une évaluation sur des épisodes qui n'ont pas servi à choisir le modèle.
     """)
     return
 
@@ -875,7 +889,11 @@ def _(mo):
     3. Une des lignes du tableau n'a demandé aucune interaction et aucun entraînement. Pourquoi ne s'en
        contente-t-on pas toujours ?
 
-    ...
+    Réponse 1 : Score final : PPO (500 sur les 3 essais) et la règle avec anticipation (500) sont les meilleurs, puis DQN (de 423 à 500), la table (de 127 à 173), la règle simple (44) et le hasard (22). Régularité : PPO est le plus régulier (trois fois 500), DQN varie beaucoup avec des courbes qui chutent, la table varie aussi. Interactions : les règles n'en demandent aucune, DQN et PPO 30 000, la table 60 000.
+
+    Réponse 2 : Non. Les deux tiennent le mât pendant les 500 pas, mais avec DQN le chariot part vers la droite et se retrouve près du bord du rail (environ 1,8, la limite est 2,4), alors qu'avec PPO il reste presque au centre et le mât bouge très peu. La récompense ne demandait pas de rester au centre : elle donne seulement 1 par pas tant que le mât tient et que le chariot ne sort pas du rail. DQN profite de cette liberté.
+
+    Réponse 3 : La règle avec anticipation fait 500 sans aucune interaction ni entraînement, mais il a fallu connaître la physique du problème et régler k à la main. Dans un vrai problème avec beaucoup de capteurs, une image comme état, ou une dynamique mal connue, on ne sait pas écrire une telle règle : c'est là que l'apprentissage devient utile.
     """)
     return
 
@@ -968,7 +986,7 @@ def _(mo):
     (indice : que sait la règle d'une ligne ?). Quel risque prend-on quand on modifie la récompense pour
     guider l'agent ?
 
-    ...
+    PPO n'a jamais atteint le sommet (0 épisode réussi sur 153, score -200), alors que la règle d'une ligne y arrive en 101 pas. La règle sait qu'il faut prendre de l'élan, c'est-à-dire augmenter sa vitesse. On pourrait donc ajouter à la récompense un bonus proportionnel à la vitesse de la voiture (ou à la hauteur atteinte), pour que l'agent ait un signal avant d'arriver au sommet. Le risque : l'agent optimise ce qu'on a écrit, pas ce qu'on voulait. Avec un bonus sur la vitesse, il pourrait par exemple apprendre à faire des allers-retours rapides dans la vallée sans jamais aller au sommet.
     """)
     return
 
@@ -987,13 +1005,13 @@ def _(mo):
     | Rubrique | Votre réponse |
     |---|---|
     | Problème | Maintenir un système en équilibre par une suite de décisions |
-    | Baselines sans apprentissage et leurs scores | ... |
-    | Baseline classique (table) et son score | ... |
-    | Méthode profonde retenue et pourquoi | ... |
-    | Régularité d'un essai à l'autre | ... |
-    | Le deep learning est-il justifié sur CartPole ? | ... |
-    | Dans quelle situation le serait-il clairement ? | ... |
-    | Trois questions à poser avant de proposer du renforcement à un client | ... |
+    | Baselines sans apprentissage et leurs scores | Hasard : 22 ; pousser du côté où le mât penche : 44 ; règle avec anticipation (k = 0,25) : 500 |
+    | Baseline classique (table) et son score | Q-learning tabulaire : de 127 à 173 selon l'essai, avec 60 000 interactions |
+    | Méthode profonde retenue et pourquoi | PPO avec Stable-Baselines3 : 500 sur les 3 essais, avec 30 000 interactions et 23 s d'entraînement, et c'est une bibliothèque éprouvée |
+    | Régularité d'un essai à l'autre | PPO : 500, 500, 500. DQN : de 423 à 500, avec des chutes brusques pendant l'entraînement. Table : de 127 à 173 |
+    | Le deep learning est-il justifié sur CartPole ? | Non : une règle d'une ligne fait 500 sans aucun entraînement. Il ne sert que si on ne connaît pas la physique du problème |
+    | Dans quelle situation le serait-il clairement ? | Quand on ne sait pas écrire de règle : état grand (beaucoup de capteurs, une image), dynamique mal connue, et un simulateur disponible pour faire des milliers d'essais |
+    | Trois questions à poser avant de proposer du renforcement à un client | A-t-on un simulateur fiable, proche de la réalité ? Peut-on écrire une récompense qui dit vraiment ce qu'on veut, et qui n'est pas trop rare ? Une règle simple ou une méthode classique ne suffit-elle pas déjà ? |
 
     ### Bilan de la journée
 
